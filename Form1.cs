@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows.Forms;
-using System.Runtime.InteropServices;
 
 namespace FileRecoveryApp;
 
 public partial class Form1 : Form
 {
+    private List<string> scannedFiles = new List<string>();
+
     public Form1()
     {
         InitializeComponent();
@@ -23,6 +24,9 @@ public partial class Form1 : Form
             if (dialog.ShowDialog() == DialogResult.OK)
             {
                 txtSourceDir.Text = dialog.SelectedPath;
+                lstFiles.Items.Clear();
+                scannedFiles.Clear();
+                btnRecoverSelected.Enabled = false;
             }
         }
     }
@@ -41,11 +45,54 @@ public partial class Form1 : Form
         }
     }
 
-    private void btnRecover_Click(object sender, EventArgs e)
+    private void btnScan_Click(object sender, EventArgs e)
     {
         if (string.IsNullOrEmpty(txtSourceDir.Text) || !Directory.Exists(txtSourceDir.Text))
         {
             MessageBox.Show("Please select a valid source directory.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        lblStatus.Text = "Status: Scanning for recoverable files...";
+        lstFiles.Items.Clear();
+        scannedFiles.Clear();
+        progressBar.Value = 0;
+        btnRecoverSelected.Enabled = false;
+        Application.DoEvents();
+
+        try
+        {
+            scannedFiles = ScanForRecoverableFiles(txtSourceDir.Text);
+            
+            if (scannedFiles.Count == 0)
+            {
+                lblStatus.Text = "Status: No recoverable files found";
+                MessageBox.Show("No recoverable files found in the specified directory.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            foreach (string file in scannedFiles)
+            {
+                FileInfo fileInfo = new FileInfo(file);
+                string fileSize = FormatFileSize(fileInfo.Length);
+                lstFiles.Items.Add($"{fileInfo.Name} ({fileSize})");
+            }
+
+            lblStatus.Text = $"Status: Found {scannedFiles.Count} recoverable files. Select files to recover.";
+            btnRecoverSelected.Enabled = true;
+        }
+        catch (Exception ex)
+        {
+            lblStatus.Text = "Status: Error during scan";
+            MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void btnRecoverSelected_Click(object sender, EventArgs e)
+    {
+        if (lstFiles.SelectedItems.Count == 0)
+        {
+            MessageBox.Show("Please select at least one file to recover.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -60,57 +107,45 @@ public partial class Form1 : Form
             Directory.CreateDirectory(txtTargetDir.Text);
         }
 
-        lblStatus.Text = "Status: Scanning for recoverable files...";
-        lstFiles.Items.Clear();
+        lblStatus.Text = "Status: Recovering selected files...";
         progressBar.Value = 0;
+        progressBar.Maximum = lstFiles.SelectedItems.Count;
         Application.DoEvents();
 
-        try
+        int recoveredCount = 0;
+        int failedCount = 0;
+
+        foreach (int selectedIndex in lstFiles.SelectedIndices)
         {
-            List<string> recoverableFiles = ScanForRecoverableFiles(txtSourceDir.Text);
+            string sourceFile = scannedFiles[selectedIndex];
             
-            if (recoverableFiles.Count == 0)
+            try
             {
-                lblStatus.Text = "Status: No recoverable files found";
-                MessageBox.Show("No recoverable files found in the specified directory.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                string fileName = Path.GetFileName(sourceFile);
+                string targetPath = Path.Combine(txtTargetDir.Text, fileName);
+                
+                if (File.Exists(sourceFile))
+                {
+                    File.Copy(sourceFile, targetPath, true);
+                    recoveredCount++;
+                }
+                else
+                {
+                    failedCount++;
+                }
+            }
+            catch
+            {
+                failedCount++;
             }
 
-            progressBar.Maximum = recoverableFiles.Count;
-            int recoveredCount = 0;
-
-            foreach (string file in recoverableFiles)
-            {
-                try
-                {
-                    string fileName = Path.GetFileName(file);
-                    string targetPath = Path.Combine(txtTargetDir.Text, fileName);
-                    
-                    if (File.Exists(file))
-                    {
-                        File.Copy(file, targetPath, true);
-                        lstFiles.Items.Add($"Recovered: {fileName}");
-                        recoveredCount++;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    lstFiles.Items.Add($"Failed: {Path.GetFileName(file)} - {ex.Message}");
-                }
-
-                progressBar.Value++;
-                Application.DoEvents();
-            }
-
-            lblStatus.Text = $"Status: Recovery complete. {recoveredCount} files recovered.";
-            MessageBox.Show($"Recovery complete. {recoveredCount} out of {recoverableFiles.Count} files recovered.", 
-                          "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            progressBar.Value++;
+            Application.DoEvents();
         }
-        catch (Exception ex)
-        {
-            lblStatus.Text = "Status: Error during recovery";
-            MessageBox.Show($"An error occurred: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
+
+        lblStatus.Text = $"Status: Recovery complete. {recoveredCount} files recovered, {failedCount} failed.";
+        MessageBox.Show($"Recovery complete.\n\nRecovered: {recoveredCount}\nFailed: {failedCount}", 
+                      "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private List<string> ScanForRecoverableFiles(string directoryPath)
@@ -144,5 +179,20 @@ public partial class Form1 : Form
         }
 
         return recoverableFiles;
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        int order = 0;
+        double size = bytes;
+        
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        
+        return $"{size:0.##} {sizes[order]}";
     }
 }

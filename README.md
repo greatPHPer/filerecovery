@@ -7,7 +7,9 @@ A C# Windows Forms application for recovering deleted files from a directory.
 - Select source directory where files were deleted (including Recycle Bin location)
 - Select target directory to recover files to
 - Scan for recoverable files in the source directory
-- Recover files to the target location
+- View list of recoverable files with file sizes
+- Select specific files to recover (multi-select supported)
+- Recover selected files to the target location
 - Progress tracking and status updates
 
 ## Requirements
@@ -37,8 +39,11 @@ bin\Debug\net8.0-windows\FileRecovery.exe
 1. Launch the application
 2. Click "Browse..." next to Source Directory to select the directory where files were deleted
 3. Click "Browse..." next to Target Directory to select where recovered files should be saved
-4. Click "Scan & Recover Files" to begin the recovery process
-5. View the progress and list of recovered files in the application window
+4. Click "Scan for Files" to scan the source directory for recoverable files
+5. A list of recoverable files will appear in the list box with file sizes
+6. Select one or more files from the list (use Ctrl+Click for multiple selection)
+7. Click "Recover Selected" to recover the selected files to the target directory
+8. View the progress and recovery status in the application window
 
 ## Important Notes
 

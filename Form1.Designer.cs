@@ -13,7 +13,8 @@ partial class Form1
     private Label lblTargetDir;
     private TextBox txtTargetDir;
     private Button btnBrowseTarget;
-    private Button btnRecover;
+    private Button btnScan;
+    private Button btnRecoverSelected;
     private Label lblStatus;
     private ProgressBar progressBar;
     private ListBox lstFiles;
@@ -45,7 +46,6 @@ partial class Form1
         lblTargetDir = new Label();
         txtTargetDir = new TextBox();
         btnBrowseTarget = new Button();
-        btnRecover = new Button();
         lblStatus = new Label();
         progressBar = new ProgressBar();
         lstFiles = new ListBox();
@@ -94,12 +94,22 @@ partial class Form1
         btnBrowseTarget.Text = "Browse...";
         btnBrowseTarget.Click += new EventHandler(btnBrowseTarget_Click);
         
-        // btnRecover
-        btnRecover.Location = new Point(20, 155);
-        btnRecover.Name = "btnRecover";
-        btnRecover.Size = new Size(150, 40);
-        btnRecover.Text = "Scan & Recover Files";
-        btnRecover.Click += new EventHandler(btnRecover_Click);
+        // btnScan
+        btnScan = new Button();
+        btnScan.Location = new Point(20, 155);
+        btnScan.Name = "btnScan";
+        btnScan.Size = new Size(150, 40);
+        btnScan.Text = "Scan for Files";
+        btnScan.Click += new EventHandler(btnScan_Click);
+        
+        // btnRecoverSelected
+        btnRecoverSelected = new Button();
+        btnRecoverSelected.Location = new Point(180, 155);
+        btnRecoverSelected.Name = "btnRecoverSelected";
+        btnRecoverSelected.Size = new Size(150, 40);
+        btnRecoverSelected.Text = "Recover Selected";
+        btnRecoverSelected.Click += new EventHandler(btnRecoverSelected_Click);
+        btnRecoverSelected.Enabled = false;
         
         // lblStatus
         lblStatus.AutoSize = true;
@@ -125,7 +135,8 @@ partial class Form1
         Controls.Add(lblTargetDir);
         Controls.Add(txtTargetDir);
         Controls.Add(btnBrowseTarget);
-        Controls.Add(btnRecover);
+        Controls.Add(btnScan);
+        Controls.Add(btnRecoverSelected);
         Controls.Add(lblStatus);
         Controls.Add(progressBar);
         Controls.Add(lstFiles);
