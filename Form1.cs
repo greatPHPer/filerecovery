@@ -78,8 +78,11 @@ public partial class Form1 : Form
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Could not scan for deleted files (Shift+Delete). Run as Administrator.\nError: {ex.Message}", 
-                              "USN Journal Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // Non-fatal error - continue with existing files only
+                lblStatus.Text = "Status: USN Journal scan failed - scanning existing files only";
+                Application.DoEvents();
+                // Don't show error dialog - just log it
+                System.Diagnostics.Debug.WriteLine($"USN Journal scan failed: {ex.Message}");
             }
             
             int totalFiles = scannedFiles.Count + deletedFiles.Count;
@@ -105,7 +108,14 @@ public partial class Form1 : Form
                 lstFiles.Items.Add($"[DELETED] {deletedFile.FileName} (Shift+Delete)");
             }
 
-            lblStatus.Text = $"Status: Found {scannedFiles.Count} existing files, {deletedFiles.Count} deleted files. Select files to recover.";
+            if (deletedFiles.Count > 0)
+            {
+                lblStatus.Text = $"Status: Found {scannedFiles.Count} existing files, {deletedFiles.Count} deleted files. Select files to recover.";
+            }
+            else
+            {
+                lblStatus.Text = $"Status: Found {scannedFiles.Count} existing files. No deleted files detected (USN Journal may not be available or no recent deletions).";
+            }
             btnRecoverSelected.Enabled = true;
         }
         catch (Exception ex)

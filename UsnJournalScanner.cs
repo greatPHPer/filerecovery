@@ -35,7 +35,7 @@ public class UsnJournalScanner
     [StructLayout(LayoutKind.Sequential)]
     private struct MFT_ENUM_DATA
     {
-        public ulong StartFileReferenceNumber;
+        public long StartFileReferenceNumber;
         public ulong LowUsn;
         public ulong HighUsn;
     }
@@ -52,8 +52,16 @@ public class UsnJournalScanner
         public ulong AllocationDelta;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CREATE_USN_JOURNAL_DATA
+    {
+        public ulong MaximumSize;
+        public ulong AllocationDelta;
+    }
+
     private const int FSCTL_ENUM_USN_DATA = 0x000900B3;
     private const int FSCTL_QUERY_USN_JOURNAL = 0x000900B4;
+    private const int FSCTL_CREATE_USN_JOURNAL = 0x000900B7;
     private const int FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
     private const int FILE_ATTRIBUTE_HIDDEN = 0x00000002;
     private const int FILE_ATTRIBUTE_SYSTEM = 0x00000004;
@@ -130,7 +138,7 @@ public class UsnJournalScanner
 
             try
             {
-                // Get USN Journal data
+                // Try to get USN Journal data
                 USN_JOURNAL_DATA journalData = new USN_JOURNAL_DATA();
                 IntPtr journalDataPtr = Marshal.AllocHGlobal(Marshal.SizeOf(journalData));
                 Marshal.StructureToPtr(journalData, journalDataPtr, false);
@@ -148,8 +156,65 @@ public class UsnJournalScanner
 
                 if (!result)
                 {
-                    Marshal.FreeHGlobal(journalDataPtr);
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to query USN Journal. Volume may not support it.");
+                    int error = Marshal.GetLastWin32Error();
+                    
+                    // If USN Journal doesn't exist, try to create it
+                    if (error == 2 || error == 1168) // ERROR_FILE_NOT_FOUND or ERROR_NOT_FOUND
+                    {
+                        Marshal.FreeHGlobal(journalDataPtr);
+                        
+                        // Try to create USN Journal
+                        CREATE_USN_JOURNAL_DATA createData = new CREATE_USN_JOURNAL_DATA
+                        {
+                            MaximumSize = 0x10000000, // 256MB
+                            AllocationDelta = 0x100000 // 1MB
+                        };
+                        
+                        IntPtr createDataPtr = Marshal.AllocHGlobal(Marshal.SizeOf(createData));
+                        Marshal.StructureToPtr(createData, createDataPtr, false);
+                        
+                        result = DeviceIoControl(
+                            hVolume,
+                            FSCTL_CREATE_USN_JOURNAL,
+                            createDataPtr,
+                            (uint)Marshal.SizeOf(createData),
+                            IntPtr.Zero,
+                            0,
+                            out bytesReturned,
+                            IntPtr.Zero);
+                        
+                        Marshal.FreeHGlobal(createDataPtr);
+                        
+                        if (!result)
+                        {
+                            throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to create USN Journal. Volume may not support it.");
+                        }
+                        
+                        // Try to query again
+                        journalDataPtr = Marshal.AllocHGlobal(Marshal.SizeOf(journalData));
+                        Marshal.StructureToPtr(journalData, journalDataPtr, false);
+                        
+                        result = DeviceIoControl(
+                            hVolume,
+                            FSCTL_QUERY_USN_JOURNAL,
+                            IntPtr.Zero,
+                            0,
+                            journalDataPtr,
+                            (uint)Marshal.SizeOf(journalData),
+                            out bytesReturned,
+                            IntPtr.Zero);
+                        
+                        if (!result)
+                        {
+                            Marshal.FreeHGlobal(journalDataPtr);
+                            throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to query USN Journal after creation.");
+                        }
+                    }
+                    else
+                    {
+                        Marshal.FreeHGlobal(journalDataPtr);
+                        throw new Win32Exception(error, "Failed to query USN Journal. Volume may not support it.");
+                    }
                 }
 
                 journalData = (USN_JOURNAL_DATA)Marshal.PtrToStructure(journalDataPtr, typeof(USN_JOURNAL_DATA));
@@ -231,7 +296,7 @@ public class UsnJournalScanner
                         break;
 
                     // Update start file reference number
-                    mftData.StartFileReferenceNumber = (ulong)Marshal.ReadInt64(buffer);
+                    mftData.StartFileReferenceNumber = Marshal.ReadInt64(buffer);
                     Marshal.StructureToPtr(mftData, mftDataPtr, false);
                 }
 
