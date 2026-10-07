@@ -8,6 +8,7 @@ namespace FileRecoveryApp;
 public partial class Form1 : Form
 {
     private List<string> scannedFiles = new List<string>();
+    private List<UsnJournalScanner.DeletedFileInfo> deletedFiles = new List<UsnJournalScanner.DeletedFileInfo>();
 
     public Form1()
     {
@@ -56,29 +57,55 @@ public partial class Form1 : Form
         lblStatus.Text = "Status: Scanning for recoverable files...";
         lstFiles.Items.Clear();
         scannedFiles.Clear();
+        deletedFiles.Clear();
         progressBar.Value = 0;
         btnRecoverSelected.Enabled = false;
         Application.DoEvents();
 
         try
         {
+            // Scan for existing files
             scannedFiles = ScanForRecoverableFiles(txtSourceDir.Text);
             
-            if (scannedFiles.Count == 0)
+            // Scan for deleted files using USN Journal
+            lblStatus.Text = "Status: Scanning for deleted files (requires Admin)...";
+            Application.DoEvents();
+            
+            try
+            {
+                UsnJournalScanner scanner = new UsnJournalScanner();
+                deletedFiles = scanner.ScanDirectoryForDeletedFiles(txtSourceDir.Text);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not scan for deleted files (Shift+Delete). Run as Administrator.\nError: {ex.Message}", 
+                              "USN Journal Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            
+            int totalFiles = scannedFiles.Count + deletedFiles.Count;
+            
+            if (totalFiles == 0)
             {
                 lblStatus.Text = "Status: No recoverable files found";
                 MessageBox.Show("No recoverable files found in the specified directory.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
+            // Add existing files
             foreach (string file in scannedFiles)
             {
                 FileInfo fileInfo = new FileInfo(file);
                 string fileSize = FormatFileSize(fileInfo.Length);
-                lstFiles.Items.Add($"{fileInfo.Name} ({fileSize})");
+                lstFiles.Items.Add($"[EXISTING] {fileInfo.Name} ({fileSize})");
             }
 
-            lblStatus.Text = $"Status: Found {scannedFiles.Count} recoverable files. Select files to recover.";
+            // Add deleted files
+            foreach (var deletedFile in deletedFiles)
+            {
+                lstFiles.Items.Add($"[DELETED] {deletedFile.FileName} (Shift+Delete)");
+            }
+
+            lblStatus.Text = $"Status: Found {scannedFiles.Count} existing files, {deletedFiles.Count} deleted files. Select files to recover.";
             btnRecoverSelected.Enabled = true;
         }
         catch (Exception ex)
@@ -114,24 +141,53 @@ public partial class Form1 : Form
 
         int recoveredCount = 0;
         int failedCount = 0;
+        int deletedSkipped = 0;
 
         foreach (int selectedIndex in lstFiles.SelectedIndices)
         {
-            string sourceFile = scannedFiles[selectedIndex];
+            string itemText = lstFiles.Items[selectedIndex].ToString();
             
             try
             {
-                string fileName = Path.GetFileName(sourceFile);
-                string targetPath = Path.Combine(txtTargetDir.Text, fileName);
-                
-                if (File.Exists(sourceFile))
+                if (itemText.StartsWith("[EXISTING]"))
                 {
-                    File.Copy(sourceFile, targetPath, true);
-                    recoveredCount++;
+                    // Recover existing file
+                    int existingIndex = GetExistingFileIndex(selectedIndex);
+                    if (existingIndex >= 0 && existingIndex < scannedFiles.Count)
+                    {
+                        string sourceFile = scannedFiles[existingIndex];
+                        string fileName = Path.GetFileName(sourceFile);
+                        string targetPath = Path.Combine(txtTargetDir.Text, fileName);
+                        
+                        if (File.Exists(sourceFile))
+                        {
+                            File.Copy(sourceFile, targetPath, true);
+                            recoveredCount++;
+                        }
+                        else
+                        {
+                            failedCount++;
+                        }
+                    }
                 }
-                else
+                else if (itemText.StartsWith("[DELETED]"))
                 {
-                    failedCount++;
+                    // Try to recover deleted file using raw sector scan
+                    int deletedIndex = GetDeletedFileIndex(selectedIndex);
+                    if (deletedIndex >= 0 && deletedIndex < deletedFiles.Count)
+                    {
+                        var deletedFile = deletedFiles[deletedIndex];
+                        bool recovered = AttemptRecoverDeletedFile(deletedFile, txtTargetDir.Text);
+                        
+                        if (recovered)
+                        {
+                            recoveredCount++;
+                        }
+                        else
+                        {
+                            deletedSkipped++;
+                        }
+                    }
                 }
             }
             catch
@@ -143,9 +199,103 @@ public partial class Form1 : Form
             Application.DoEvents();
         }
 
-        lblStatus.Text = $"Status: Recovery complete. {recoveredCount} files recovered, {failedCount} failed.";
-        MessageBox.Show($"Recovery complete.\n\nRecovered: {recoveredCount}\nFailed: {failedCount}", 
-                      "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        string message = $"Recovery complete.\n\nRecovered: {recoveredCount}\nFailed: {failedCount}";
+        if (deletedSkipped > 0)
+        {
+            message += $"\nDeleted files (Shift+Delete): {deletedSkipped} - may require raw disk scan";
+        }
+        
+        lblStatus.Text = $"Status: Recovery complete. {recoveredCount} files recovered.";
+        MessageBox.Show(message, "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private int GetExistingFileIndex(int listIndex)
+    {
+        int count = 0;
+        for (int i = 0; i < listIndex; i++)
+        {
+            if (lstFiles.Items[i]?.ToString()?.StartsWith("[EXISTING]") ?? false)
+                count++;
+        }
+        return count;
+    }
+
+    private int GetDeletedFileIndex(int listIndex)
+    {
+        int count = 0;
+        for (int i = 0; i < listIndex; i++)
+        {
+            if (lstFiles.Items[i]?.ToString()?.StartsWith("[DELETED]") ?? false)
+                count++;
+        }
+        return count;
+    }
+
+    private bool AttemptRecoverDeletedFile(UsnJournalScanner.DeletedFileInfo deletedFile, string targetDir)
+    {
+        try
+        {
+            // This is a placeholder for raw disk recovery
+            // For now, we'll create a stub file with the original name
+            // Real implementation would require raw disk sector scanning
+            
+            string targetPath = Path.Combine(targetDir, deletedFile.FileName);
+            
+            // Try to find the file in common locations first
+            // This is a basic heuristic - real recovery needs raw disk access
+            string dirName = Path.GetDirectoryName(deletedFile.OriginalPath) ?? "";
+            string[] possiblePaths = {
+                deletedFile.OriginalPath,
+                Path.Combine(dirName, $"~${deletedFile.FileName}"),
+                Path.Combine(dirName, deletedFile.FileName)
+            };
+
+            foreach (string path in possiblePaths)
+            {
+                if (File.Exists(path))
+                {
+                    File.Copy(path, targetPath, true);
+                    return true;
+                }
+            }
+
+            // If file data still exists in temporary locations
+            string tempPath = Path.GetTempPath();
+            string[] tempFiles = Directory.GetFiles(tempPath, $"*{Path.GetFileNameWithoutExtension(deletedFile.FileName)}*", SearchOption.AllDirectories);
+            
+            foreach (string tempFile in tempFiles)
+            {
+                try
+                {
+                    if (new FileInfo(tempFile).Length > 0)
+                    {
+                        File.Copy(tempFile, targetPath, true);
+                        return true;
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+            }
+
+            // Create a placeholder file indicating recovery not possible without raw disk access
+            using (StreamWriter writer = File.CreateText(targetPath))
+            {
+                writer.WriteLine($"This file was deleted with Shift+Delete or force-delete.");
+                writer.WriteLine($"Original path: {deletedFile.OriginalPath}");
+                writer.WriteLine($"Delete time: {deletedFile.DeleteTime}");
+                writer.WriteLine();
+                writer.WriteLine("To recover the actual file data, raw disk sector scanning is required.");
+                writer.WriteLine("This would require Administrator privileges and complex NTFS parsing.");
+            }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private List<string> ScanForRecoverableFiles(string directoryPath)
@@ -183,6 +333,9 @@ public partial class Form1 : Form
 
     private string FormatFileSize(long bytes)
     {
+        if (bytes == 0)
+            return "Unknown size";
+            
         string[] sizes = { "B", "KB", "MB", "GB", "TB" };
         int order = 0;
         double size = bytes;
