@@ -18,6 +18,10 @@ partial class Form1
     private Label lblStatus;
     private ProgressBar progressBar;
     private ListBox lstFiles;
+    private CheckBox chkUSNJournal;
+    private CheckBox chkRecycleBin;
+    private CheckBox chkRawDisk;
+    private Label lblScanOptions;
 
     /// <summary>
     ///  Clean up any resources being used.
@@ -111,20 +115,55 @@ partial class Form1
         btnRecoverSelected.Click += new EventHandler(btnRecoverSelected_Click);
         btnRecoverSelected.Enabled = false;
         
+        // lblScanOptions
+        lblScanOptions = new Label();
+        lblScanOptions.AutoSize = true;
+        lblScanOptions.Location = new Point(20, 205);
+        lblScanOptions.Name = "lblScanOptions";
+        lblScanOptions.Size = new Size(200, 20);
+        lblScanOptions.Text = "Scan Options:";
+        
+        // chkUSNJournal
+        chkUSNJournal = new CheckBox();
+        chkUSNJournal.AutoSize = true;
+        chkUSNJournal.Location = new Point(20, 230);
+        chkUSNJournal.Name = "chkUSNJournal";
+        chkUSNJournal.Size = new Size(200, 24);
+        chkUSNJournal.Text = "USN Journal (Shift+Delete)";
+        chkUSNJournal.Checked = true;
+        
+        // chkRecycleBin
+        chkRecycleBin = new CheckBox();
+        chkRecycleBin.AutoSize = true;
+        chkRecycleBin.Location = new Point(250, 230);
+        chkRecycleBin.Name = "chkRecycleBin";
+        chkRecycleBin.Size = new Size(150, 24);
+        chkRecycleBin.Text = "Recycle Bin";
+        chkRecycleBin.Checked = true;
+        
+        // chkRawDisk
+        chkRawDisk = new CheckBox();
+        chkRawDisk.AutoSize = true;
+        chkRawDisk.Location = new Point(420, 230);
+        chkRawDisk.Name = "chkRawDisk";
+        chkRawDisk.Size = new Size(200, 24);
+        chkRawDisk.Text = "Raw Disk Scan (Deep)";
+        chkRawDisk.Checked = false;
+        
         // lblStatus
         lblStatus.AutoSize = true;
-        lblStatus.Location = new Point(20, 205);
+        lblStatus.Location = new Point(20, 265);
         lblStatus.Name = "lblStatus";
         lblStatus.Size = new Size(100, 20);
         lblStatus.Text = "Status: Ready";
         
         // progressBar
-        progressBar.Location = new Point(20, 230);
+        progressBar.Location = new Point(20, 290);
         progressBar.Name = "progressBar";
         progressBar.Size = new Size(760, 30);
         
         // lstFiles
-        lstFiles.Location = new Point(20, 270);
+        lstFiles.Location = new Point(20, 330);
         lstFiles.Name = "lstFiles";
         lstFiles.Size = new Size(760, 200);
         lstFiles.SelectionMode = SelectionMode.MultiExtended;
@@ -137,6 +176,10 @@ partial class Form1
         Controls.Add(btnBrowseTarget);
         Controls.Add(btnScan);
         Controls.Add(btnRecoverSelected);
+        Controls.Add(lblScanOptions);
+        Controls.Add(chkUSNJournal);
+        Controls.Add(chkRecycleBin);
+        Controls.Add(chkRawDisk);
         Controls.Add(lblStatus);
         Controls.Add(progressBar);
         Controls.Add(lstFiles);

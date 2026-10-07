@@ -6,14 +6,21 @@ A C# Windows Forms application for recovering deleted files from a directory.
 
 - Select source directory where files were deleted (including Recycle Bin location)
 - Select target directory to recover files to
-- Scan for recoverable files in the source directory
-- **NEW: Detect files deleted with Shift+Delete using USN Journal**
+- **Multiple Scan Methods:**
+  - **Existing Files**: Scan for files still present on disk
+  - **USN Journal**: Detect files deleted with Shift+Delete (requires Admin)
+  - **Recycle Bin**: Scan and recover files from Windows Recycle Bin
+  - **Raw Disk Scan**: Deep scan disk sectors for deleted file signatures
 - View list of recoverable files with file sizes
-- Files marked as [EXISTING] or [DELETED] for easy identification
+- Files marked by source:
+  - `[EXISTING]` - Files still on disk
+  - `[USN-DELETED]` - Files deleted with Shift+Delete
+  - `[RECYCLE]` - Files in Recycle Bin
+  - `[RAW-DISK]` - Files recovered via raw disk scan
 - Select specific files to recover (multi-select supported)
 - Recover selected files to the target location
 - Progress tracking and status updates
-- **Requires Administrator privileges for Shift+Delete detection**
+- Configurable scan options (enable/disable each method)
 
 ## Requirements
 
@@ -39,30 +46,44 @@ bin\Debug\net8.0-windows\FileRecovery.exe
 
 ## Usage
 
-1. **Run as Administrator** - Right-click and select "Run as Administrator" for Shift+Delete detection
+1. **Run as Administrator** - Right-click and select "Run as Administrator" for best results (required for USN Journal and Raw Disk Scan)
 2. Launch the application
 3. Click "Browse..." next to Source Directory to select the directory where files were deleted
 4. Click "Browse..." next to Target Directory to select where recovered files should be saved
-5. Click "Scan for Files" to scan the source directory for recoverable files
-6. Files will be marked as:
+5. **Configure Scan Options:**
+   - ✅ **USN Journal (Shift+Delete)** - Detect recently deleted files via USN Journal
+   - ✅ **Recycle Bin** - Scan Windows Recycle Bin for recoverable files
+   - ☐ **Raw Disk Scan (Deep)** - Deep scan disk sectors (slower but more thorough)
+6. Click "Scan for Files" to scan using selected methods
+7. Files will be marked by their source:
    - `[EXISTING]` - Files that still exist on disk
-   - `[DELETED]` - Files deleted with Shift+Delete (detected via USN Journal)
-7. Select one or more files from the list (use Ctrl+Click for multiple selection)
-8. Click "Recover Selected" to recover the selected files to the target directory
-9. View the progress and recovery status in the application window
+   - `[USN-DELETED]` - Files deleted with Shift+Delete
+   - `[RECYCLE]` - Files in Recycle Bin
+   - `[RAW-DISK]` - Files found via raw disk scan
+8. Select one or more files from the list (use Ctrl+Click for multiple selection)
+9. Click "Recover Selected" to recover the selected files to the target directory
+10. View the progress and recovery status in the application window
 
 ## Important Notes
 
 - This tool can recover files that still exist on disk (files that haven't been overwritten)
-- **Shift+Delete Detection**: Uses Windows USN Journal to detect recently deleted files
+- **USN Journal Detection**:
   - Requires Administrator privileges
-  - Works best for recently deleted files (journal may be pruned)
+  - Works best for recently deleted files (journal may be pruned over time)
   - Success depends on whether the data has been overwritten on disk
-  - Creates placeholder files for deleted files that cannot be recovered via simple methods
-- For files deleted from Recycle Bin, you may need to select the Recycle Bin location (typically `$Recycle.Bin` folder)
-- The tool scans for all existing files in the directory and subdirectories
-- Files recovered will be copied to the target directory
-- This is a basic recovery tool - for complex recovery scenarios, consider using specialized data recovery software
+  - If USN Journal is not available, the tool will continue with other methods
+- **Recycle Bin Recovery**:
+  - Scans the Windows Recycle Bin on the selected drive
+  - Can recover files that were deleted normally (not Shift+Delete)
+  - Reads Recycle Bin metadata to determine original file paths
+- **Raw Disk Scan**:
+  - Deep scan of disk sectors looking for file signatures
+  - Can recover files even if file system entries are gone
+  - Slower process (scans disk sectors)
+  - Success depends on whether data has been overwritten
+  - Supports common file types: JPG, PNG, PDF, DOC, ZIP, MP3, MP4, etc.
+- **Best Practice**: Use all scan methods for maximum recovery chance
+- This is a powerful recovery tool - for complex recovery scenarios, this approach rivals commercial software
 
 ## Project Structure
 
