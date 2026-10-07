@@ -78,7 +78,7 @@ public class RawDiskScanner
         public string SuggestedName { get; set; }
     }
 
-    public List<RecoveredFileInfo> ScanRawDisk(string driveLetter, long maxSectorsToScan = 100000)
+    public List<RecoveredFileInfo> ScanRawDisk(string driveLetter, long maxSectorsToScan = 100000, string searchText = null)
     {
         List<RecoveredFileInfo> recoveredFiles = new List<RecoveredFileInfo>();
 
@@ -132,6 +132,23 @@ public class RawDiskScanner
                                     SuggestedName = $"recovered_{signature.Key}_{currentSector}_{i}{signature.Key}"
                                 });
                             }
+                        }
+                    }
+
+                    // Search for specific text if provided
+                    if (!string.IsNullOrEmpty(searchText))
+                    {
+                        string bufferText = Encoding.ASCII.GetString(buffer);
+                        int textIndex = bufferText.IndexOf(searchText, StringComparison.OrdinalIgnoreCase);
+                        if (textIndex >= 0)
+                        {
+                            recoveredFiles.Add(new RecoveredFileInfo
+                            {
+                                FileType = ".txt",
+                                StartSector = currentSector + (textIndex / sectorSize),
+                                EstimatedSize = 4096, // Default 4KB for text files
+                                SuggestedName = $"recovered_text_{currentSector}_{textIndex}.txt"
+                            });
                         }
                     }
 

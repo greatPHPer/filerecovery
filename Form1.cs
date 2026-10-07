@@ -48,6 +48,55 @@ public partial class Form1 : Form
         }
     }
 
+    private void btnEnableUSN_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            string driveLetter = Path.GetPathRoot(txtSourceDir.Text).Replace("\\", "");
+            if (string.IsNullOrEmpty(driveLetter))
+            {
+                MessageBox.Show("Please select a source directory first.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Try to enable USN Journal using fsutil
+            System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "fsutil",
+                Arguments = $"usn createjournal m=256 a=1 {driveLetter}",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                Verb = "runas" // Run as administrator
+            };
+
+            System.Diagnostics.Process process = System.Diagnostics.Process.Start(psi);
+            if (process != null)
+            {
+                string output = process.StandardOutput.ReadToEnd();
+                string error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                if (process.ExitCode == 0)
+                {
+                    MessageBox.Show($"USN Journal enabled successfully on {driveLetter}\n\nOutput: {output}", 
+                                  "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show($"Failed to enable USN Journal.\n\nError: {error}", 
+                                  "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error enabling USN Journal: {ex.Message}\n\nTry running the application as Administrator.", 
+                          "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
     private void btnScan_Click(object sender, EventArgs e)
     {
         if (string.IsNullOrEmpty(txtSourceDir.Text) || !Directory.Exists(txtSourceDir.Text))
@@ -116,11 +165,13 @@ public partial class Form1 : Form
                 {
                     string driveLetter = Path.GetPathRoot(txtSourceDir.Text).Replace("\\", "");
                     RawDiskScanner rawScanner = new RawDiskScanner();
-                    rawDiskFiles = rawScanner.ScanRawDisk(driveLetter, 50000); // Scan 50k sectors
+                    string searchText = txtSearchText.Text.Trim();
+                    rawDiskFiles = rawScanner.ScanRawDisk(driveLetter, 100000, searchText); // Scan 100k sectors
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Raw disk scan failed: {ex.Message}");
+                    MessageBox.Show($"Raw disk scan failed: {ex.Message}\n\nTry running as Administrator.", "Raw Disk Scan Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
             
