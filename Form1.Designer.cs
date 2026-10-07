@@ -21,6 +21,7 @@ partial class Form1
     private CheckBox chkUSNJournal;
     private CheckBox chkRecycleBin;
     private CheckBox chkRawDisk;
+    private CheckBox chkFullDiskScan;
     private Label lblScanOptions;
     private TextBox txtSearchText;
     private Label lblSearchText;
@@ -153,24 +154,33 @@ partial class Form1
         chkRawDisk.Text = "Raw Disk Scan (Deep)";
         chkRawDisk.Checked = true;
         
+        // chkFullDiskScan
+        chkFullDiskScan = new CheckBox();
+        chkFullDiskScan.AutoSize = true;
+        chkFullDiskScan.Location = new Point(20, 260);
+        chkFullDiskScan.Name = "chkFullDiskScan";
+        chkFullDiskScan.Size = new Size(300, 24);
+        chkFullDiskScan.Text = "Full Disk Scan (Very Slow - Entire Drive)";
+        chkFullDiskScan.Checked = false;
+        
         // lblSearchText
         lblSearchText = new Label();
         lblSearchText.AutoSize = true;
-        lblSearchText.Location = new Point(20, 260);
+        lblSearchText.Location = new Point(20, 290);
         lblSearchText.Name = "lblSearchText";
         lblSearchText.Size = new Size(200, 20);
         lblSearchText.Text = "Search Text (optional):";
         
         // txtSearchText
         txtSearchText = new TextBox();
-        txtSearchText.Location = new Point(20, 285);
+        txtSearchText.Location = new Point(20, 315);
         txtSearchText.Name = "txtSearchText";
         txtSearchText.Size = new Size(450, 27);
         txtSearchText.Text = "";
         
         // btnEnableUSN
         btnEnableUSN = new Button();
-        btnEnableUSN.Location = new Point(480, 285);
+        btnEnableUSN.Location = new Point(480, 315);
         btnEnableUSN.Name = "btnEnableUSN";
         btnEnableUSN.Size = new Size(120, 30);
         btnEnableUSN.Text = "Enable USN";
@@ -178,20 +188,20 @@ partial class Form1
         
         // lblStatus
         lblStatus.AutoSize = true;
-        lblStatus.Location = new Point(20, 320);
+        lblStatus.Location = new Point(20, 350);
         lblStatus.Name = "lblStatus";
         lblStatus.Size = new Size(100, 20);
         lblStatus.Text = "Status: Ready";
         
         // progressBar
-        progressBar.Location = new Point(20, 345);
+        progressBar.Location = new Point(20, 375);
         progressBar.Name = "progressBar";
         progressBar.Size = new Size(760, 30);
         
         // lstFiles
-        lstFiles.Location = new Point(20, 385);
+        lstFiles.Location = new Point(20, 415);
         lstFiles.Name = "lstFiles";
-        lstFiles.Size = new Size(760, 180);
+        lstFiles.Size = new Size(760, 150);
         lstFiles.SelectionMode = SelectionMode.MultiExtended;
         
         Controls.Add(lblSourceDir);
@@ -206,6 +216,7 @@ partial class Form1
         Controls.Add(chkUSNJournal);
         Controls.Add(chkRecycleBin);
         Controls.Add(chkRawDisk);
+        Controls.Add(chkFullDiskScan);
         Controls.Add(lblSearchText);
         Controls.Add(txtSearchText);
         Controls.Add(btnEnableUSN);

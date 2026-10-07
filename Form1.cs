@@ -15,6 +15,7 @@ public partial class Form1 : Form
     public Form1()
     {
         InitializeComponent();
+        chkFullDiskScan.CheckedChanged += chkFullDiskScan_CheckedChanged;
     }
 
     private void btnBrowseSource_Click(object sender, EventArgs e)
@@ -97,6 +98,23 @@ public partial class Form1 : Form
         }
     }
 
+    private void chkFullDiskScan_CheckedChanged(object sender, EventArgs e)
+    {
+        if (chkFullDiskScan.Checked)
+        {
+            var result = MessageBox.Show(
+                "Full disk scan will scan the ENTIRE drive. This can take hours.\n\nAre you sure you want to continue?",
+                "Warning",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+            
+            if (result == DialogResult.No)
+            {
+                chkFullDiskScan.Checked = false;
+            }
+        }
+    }
+
     private void btnScan_Click(object sender, EventArgs e)
     {
         if (string.IsNullOrEmpty(txtSourceDir.Text) || !Directory.Exists(txtSourceDir.Text))
@@ -158,15 +176,17 @@ public partial class Form1 : Form
             // Raw disk scan (if enabled)
             if (chkRawDisk.Checked)
             {
-                lblStatus.Text = "Status: Performing raw disk scan (this may take a while)...";
+                string driveLetter = Path.GetPathRoot(txtSourceDir.Text).Replace("\\", "");
+                long maxSectors = chkFullDiskScan.Checked ? 10000000 : 100000; // 10M sectors for full scan, 100k for partial
+                
+                lblStatus.Text = $"Status: Performing raw disk scan (scanning {maxSectors} sectors)...";
                 Application.DoEvents();
                 
                 try
                 {
-                    string driveLetter = Path.GetPathRoot(txtSourceDir.Text).Replace("\\", "");
                     RawDiskScanner rawScanner = new RawDiskScanner();
                     string searchText = txtSearchText.Text.Trim();
-                    rawDiskFiles = rawScanner.ScanRawDisk(driveLetter, 100000, searchText); // Scan 100k sectors
+                    rawDiskFiles = rawScanner.ScanRawDisk(driveLetter, maxSectors, searchText);
                 }
                 catch (Exception ex)
                 {
