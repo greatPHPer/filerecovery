@@ -146,12 +146,31 @@ public partial class Form1 : Form
                 
                 try
                 {
-                    UsnJournalScanner scanner = new UsnJournalScanner();
-                    deletedFiles = scanner.ScanDirectoryForDeletedFiles(txtSourceDir.Text);
+                    string driveLetter = Path.GetPathRoot(txtSourceDir.Text).Replace("\\", "");
+                    UsnJournalMonitor monitor = new UsnJournalMonitor();
+                    var allDeletedFiles = monitor.ScanForDeletedFiles(driveLetter);
+                    
+                    // Filter by the source directory
+                    string sourceDirLower = txtSourceDir.Text.ToLower();
+                    foreach (var file in allDeletedFiles)
+                    {
+                        if (file.FullPath.ToLower().StartsWith(sourceDirLower))
+                        {
+                            deletedFiles.Add(new UsnJournalScanner.DeletedFileInfo
+                            {
+                                FileName = file.FileName,
+                                OriginalPath = file.FullPath,
+                                FileSize = file.FileSizeBytes ?? 0,
+                                DeleteTime = file.DeletedAtUtc,
+                                IsExisting = false
+                            });
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"USN Journal scan failed: {ex.Message}");
+                    MessageBox.Show($"USN Journal scan failed: {ex.Message}\n\nTry running as Administrator.", "USN Journal Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }
             
