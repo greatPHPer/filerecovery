@@ -187,11 +187,16 @@ public class UsnJournalMonitor
                     }
                 }
 
-                if (filterByDirectory && (string.IsNullOrWhiteSpace(directory) ||
-                    !MatchesDirectory(
+                // Skip if directory couldn't be resolved
+                if (string.IsNullOrWhiteSpace(directory))
+                {
+                    continue;
+                }
+
+                if (filterByDirectory && !MatchesDirectory(
                         directory,
                         normalizedDirectory,
-                        includeSubdirectories)))
+                        includeSubdirectories))
                 {
                     continue;
                 }
