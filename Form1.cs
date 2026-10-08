@@ -148,23 +148,28 @@ public partial class Form1 : Form
                 {
                     string driveLetter = Path.GetPathRoot(txtSourceDir.Text).Replace("\\", "");
                     UsnJournalMonitor monitor = new UsnJournalMonitor();
-                    var allDeletedFiles = monitor.ScanForDeletedFiles(driveLetter);
                     
-                    // Filter by the source directory
-                    string sourceDirLower = txtSourceDir.Text.ToLower();
+                    var allDeletedFiles = monitor.ScanDeletedDirectoryFromUsnJournal(
+                        driveLetter,
+                        txtSourceDir.Text,
+                        includeSubdirectories: true,
+                        onProgress: (progress) =>
+                        {
+                            lblStatus.Text = $"Status: {progress}";
+                            Application.DoEvents();
+                        });
+                    
+                    // Convert to our format
                     foreach (var file in allDeletedFiles)
                     {
-                        if (file.FullPath.ToLower().StartsWith(sourceDirLower))
+                        deletedFiles.Add(new UsnJournalScanner.DeletedFileInfo
                         {
-                            deletedFiles.Add(new UsnJournalScanner.DeletedFileInfo
-                            {
-                                FileName = file.FileName,
-                                OriginalPath = file.FullPath,
-                                FileSize = file.FileSizeBytes ?? 0,
-                                DeleteTime = file.DeletedAtUtc,
-                                IsExisting = false
-                            });
-                        }
+                            FileName = file.FileName,
+                            OriginalPath = file.FullPath,
+                            FileSize = file.FileSizeBytes ?? 0,
+                            DeleteTime = file.DeletedAtUtc,
+                            IsExisting = false
+                        });
                     }
                 }
                 catch (Exception ex)

@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
@@ -21,6 +22,10 @@ public class UsnJournalMonitor
 
     private const uint UsnReasonFileDelete = 0x00000200;
     private const int UsnRecordV2MinimumLength = 60;
+    private const uint FileAttributeDirectory = 0x00000010;
+
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<ulong, string>> _parentPathCaches =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public class DeletedFileInfo
     {
@@ -29,101 +34,269 @@ public class UsnJournalMonitor
         public string DirectoryPath { get; set; } = "";
         public DateTime DeletedAtUtc { get; set; }
         public long? FileSizeBytes { get; set; }
+        public ulong FileReferenceNumber { get; set; }
+        public ulong ParentFileReferenceNumber { get; set; }
     }
 
-    public List<DeletedFileInfo> ScanForDeletedFiles(string driveLetter)
+    public class UsnDeletedFileRecord
     {
-        var deletedFiles = new List<DeletedFileInfo>();
-        var volumeKey = driveLetter.TrimEnd(Path.DirectorySeparatorChar);
+        public string FullPath { get; set; } = "";
+        public ulong FileReferenceNumber { get; set; }
+        public ulong ParentFileReferenceNumber { get; set; }
+        public string FileName { get; set; } = "";
+        public string Directory { get; set; } = "";
+        public DateTime DeletedAtUtc { get; set; }
 
-        try
+        public UsnDeletedFileRecord(
+            string fullPath,
+            ulong fileReferenceNumber,
+            ulong parentFileReferenceNumber,
+            string fileName,
+            string directory,
+            DateTime deletedAtUtc)
         {
-            using var volumeHandle = CreateFile(
-                $"\\\\.\\{volumeKey[..2]}",
-                GenericRead,
-                FileShareRead | FileShareWrite | FileShareDelete,
-                IntPtr.Zero,
-                OpenExisting,
-                FileFlagBackupSemantics,
-                IntPtr.Zero);
+            FullPath = fullPath;
+            FileReferenceNumber = fileReferenceNumber;
+            ParentFileReferenceNumber = parentFileReferenceNumber;
+            FileName = fileName;
+            Directory = directory;
+            DeletedAtUtc = deletedAtUtc;
+        }
+    }
 
-            if (volumeHandle.IsInvalid)
+    public static class RecoveryMonitoringExclusions
+    {
+        public static bool IsExcludedPath(string path)
+        {
+            // Stub - can be expanded later
+            return false;
+        }
+    }
+
+    public List<DeletedFileInfo> ScanDeletedDirectoryFromUsnJournal(
+        string root,
+        string targetDirectory,
+        bool includeSubdirectories,
+        Action<string>? onProgress = null)
+    {
+        var volumeKey = root.TrimEnd(Path.DirectorySeparatorChar);
+
+        using var volumeHandle = CreateFile(
+            $@"\\.\\{volumeKey[..2]}",
+            GenericRead,
+            FileShareRead | FileShareWrite | FileShareDelete,
+            IntPtr.Zero,
+            OpenExisting,
+            FileFlagBackupSemantics,
+            IntPtr.Zero);
+
+        if (volumeHandle.IsInvalid)
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        if (!TryQueryJournal(volumeHandle, out var journal, out var queryError))
+        {
+            throw new Win32Exception(
+                queryError,
+                $"Could not query the USN journal for {volumeKey}.");
+        }
+
+        var normalizedDirectory = NormalizePath(targetDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar);
+
+        var cache = _parentPathCaches.GetOrAdd(
+            volumeKey,
+            _ => new ConcurrentDictionary<ulong, string>());
+
+        // Keep only the newest historical deletion for each resolved full path
+        var latestResultByPath =
+            new Dictionary<string, UsnDeletedFileRecord>(
+                StringComparer.OrdinalIgnoreCase);
+
+        var nextUsn = journal.FirstUsn;
+        var batchesRead = 0L;
+        var deleteRecordsSeen = 0L;
+        var parentResolutions = 0L;
+        var directoryMatches = 0L;
+        var duplicatePathCollapses = 0L;
+
+        onProgress?.Invoke($"USN scan started: scanning {targetDirectory}...");
+
+        while (nextUsn < journal.NextUsn)
+        {
+            var records = ReadRecords(
+                volumeHandle,
+                journal.JournalId,
+                nextUsn,
+                out var returnedNextUsn);
+
+            batchesRead++;
+
+            if (returnedNextUsn <= nextUsn)
             {
-                throw new Win32Exception(Marshal.GetLastWin32Error());
+                break;
             }
 
-            if (!TryQueryJournal(volumeHandle, out var journal))
+            foreach (var record in records)
             {
-                return deletedFiles;
-            }
-
-            // Read all records from the journal
-            var nextUsn = journal.FirstUsn;
-            var parentPathCache = new Dictionary<ulong, string>();
-
-            while (nextUsn < journal.NextUsn)
-            {
-                var records = ReadRecords(volumeHandle, journal.JournalId, nextUsn, out var returnedNextUsn);
-
-                if (returnedNextUsn <= nextUsn)
+                if ((record.Reason & UsnReasonFileDelete) == 0 ||
+                    (record.FileAttributes & FileAttributeDirectory) != 0 ||
+                    string.IsNullOrWhiteSpace(record.FileName))
                 {
-                    break;
+                    continue;
                 }
 
-                foreach (var record in records)
-                {
-                    if ((record.Reason & UsnReasonFileDelete) == 0 ||
-                        (record.FileAttributes & 0x10) != 0 ||
-                        string.IsNullOrWhiteSpace(record.FileName))
-                    {
-                        continue;
-                    }
+                deleteRecordsSeen++;
 
-                    var directory = parentPathCache.TryGetValue(record.ParentFileReferenceNumber, out var knownPath)
-                        ? knownPath
-                        : ResolveParentDirectory(volumeHandle, record.ParentFileReferenceNumber);
+                var directory = cache.TryGetValue(
+                    record.ParentFileReferenceNumber,
+                    out var knownDirectory)
+                    ? knownDirectory
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(directory))
+                {
+                    directory = ResolveParentDirectory(
+                        volumeHandle,
+                        record.ParentFileReferenceNumber);
+
+                    parentResolutions++;
 
                     if (!string.IsNullOrWhiteSpace(directory))
                     {
-                        parentPathCache[record.ParentFileReferenceNumber] = directory;
+                        cache[record.ParentFileReferenceNumber] = directory;
                     }
-
-                    if (string.IsNullOrWhiteSpace(directory))
-                    {
-                        directory = "(Parent directory unavailable)";
-                    }
-
-                    var recordPath = Path.Combine(directory, record.FileName);
-
-                    deletedFiles.Add(new DeletedFileInfo
-                    {
-                        FileName = record.FileName,
-                        FullPath = recordPath,
-                        DirectoryPath = directory,
-                        DeletedAtUtc = record.TimestampUtc,
-                        FileSizeBytes = null
-                    });
                 }
 
-                nextUsn = returnedNextUsn;
-
-                if (records.Count == 0)
+                if (string.IsNullOrWhiteSpace(directory) ||
+                    !MatchesDirectory(
+                        directory,
+                        normalizedDirectory,
+                        includeSubdirectories))
                 {
-                    break;
+                    continue;
                 }
+
+                directoryMatches++;
+
+                var fullPath = NormalizePath(
+                    Path.Combine(directory, record.FileName));
+
+                if (RecoveryMonitoringExclusions.IsExcludedPath(fullPath))
+                {
+                    continue;
+                }
+
+                var candidate = new UsnDeletedFileRecord(
+                    fullPath,
+                    record.FileReferenceNumber,
+                    record.ParentFileReferenceNumber,
+                    record.FileName,
+                    directory,
+                    record.TimestampUtc);
+
+                if (latestResultByPath.TryGetValue(
+                        fullPath,
+                        out var existing))
+                {
+                    if (candidate.DeletedAtUtc <= existing.DeletedAtUtc)
+                    {
+                        duplicatePathCollapses++;
+                        continue;
+                    }
+
+                    duplicatePathCollapses++;
+                }
+
+                latestResultByPath[fullPath] = candidate;
+            }
+
+            nextUsn = returnedNextUsn;
+
+            if (batchesRead == 1 || batchesRead % 16 == 0)
+            {
+                onProgress?.Invoke(
+                    $"USN scan progress: batches={batchesRead:N0}, " +
+                    $"matches={directoryMatches:N0}, " +
+                    $"unique files={latestResultByPath.Count:N0}");
+            }
+
+            if (records.Count == 0)
+            {
+                break;
             }
         }
-        catch (Exception ex)
-        {
-            throw new Exception($"USN Journal scan failed: {ex.Message}", ex);
-        }
 
-        return deletedFiles;
+        var results = latestResultByPath.Values
+            .OrderByDescending(record => record.DeletedAtUtc)
+            .Select(r => new DeletedFileInfo
+            {
+                FileName = r.FileName,
+                FullPath = r.FullPath,
+                DirectoryPath = r.Directory,
+                DeletedAtUtc = r.DeletedAtUtc,
+                FileSizeBytes = null,
+                FileReferenceNumber = r.FileReferenceNumber,
+                ParentFileReferenceNumber = r.ParentFileReferenceNumber
+            })
+            .ToList();
+
+        onProgress?.Invoke(
+            $"USN scan complete: found {results.Count} deleted files in {targetDirectory}");
+
+        return results;
     }
 
-    private static bool TryQueryJournal(SafeFileHandle volumeHandle, out JournalInfo journal)
+    private static bool MatchesDirectory(
+        string directory,
+        string targetDirectory,
+        bool includeSubdirectories)
+    {
+        var normalizedDir = NormalizePath(directory)
+            .TrimEnd(Path.DirectorySeparatorChar);
+
+        if (string.Equals(normalizedDir, targetDirectory, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (includeSubdirectories)
+        {
+            return normalizedDir.StartsWith(
+                targetDirectory + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private static string NormalizePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return path;
+        }
+
+        path = path.Replace('/', Path.DirectorySeparatorChar);
+
+        if (path.StartsWith(@"\\?\\UNC\\", StringComparison.OrdinalIgnoreCase))
+        {
+            return @"\\" + path[8..];
+        }
+
+        if (path.StartsWith(@"\\?\\", StringComparison.OrdinalIgnoreCase))
+        {
+            return path[4..];
+        }
+
+        return path;
+    }
+
+    private static bool TryQueryJournal(SafeFileHandle volumeHandle, out JournalInfo journal, out int error)
     {
         journal = default;
+        error = 0;
         var output = new byte[64];
 
         if (!DeviceIoControl(
@@ -136,7 +309,7 @@ public class UsnJournalMonitor
                 out var bytesReturned,
                 IntPtr.Zero))
         {
-            var error = Marshal.GetLastWin32Error();
+            error = Marshal.GetLastWin32Error();
             if (error == 2 || error == 1178)
             {
                 return false;
@@ -168,7 +341,7 @@ public class UsnJournalMonitor
         var request = new ReadUsnJournalRequest
         {
             StartUsn = startUsn,
-            ReasonMask = UsnReasonFileDelete,
+            ReasonMask = 0xFFFFFFFF,
             ReturnOnlyOnClose = 0,
             Timeout = 1,
             BytesToWaitFor = 1,
