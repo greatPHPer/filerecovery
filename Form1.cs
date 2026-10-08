@@ -149,15 +149,32 @@ public partial class Form1 : Form
                     string driveLetter = Path.GetPathRoot(txtSourceDir.Text).Replace("\\", "");
                     UsnJournalMonitor monitor = new UsnJournalMonitor();
                     
-                    var allDeletedFiles = monitor.ScanDeletedDirectoryFromUsnJournal(
-                        driveLetter,
-                        txtSourceDir.Text,
-                        includeSubdirectories: true,
-                        onProgress: (progress) =>
-                        {
-                            lblStatus.Text = $"Status: {progress}";
-                            Application.DoEvents();
-                        });
+                    List<UsnJournalMonitor.DeletedFileInfo> allDeletedFiles;
+                    
+                    if (chkScanEntireDrive.Checked)
+                    {
+                        // Scan entire drive without directory filtering
+                        allDeletedFiles = monitor.ScanEntireDriveForDeletedFiles(
+                            driveLetter,
+                            onProgress: (progress) =>
+                            {
+                                lblStatus.Text = $"Status: {progress}";
+                                Application.DoEvents();
+                            });
+                    }
+                    else
+                    {
+                        // Scan specific directory
+                        allDeletedFiles = monitor.ScanDeletedDirectoryFromUsnJournal(
+                            driveLetter,
+                            txtSourceDir.Text,
+                            includeSubdirectories: true,
+                            onProgress: (progress) =>
+                            {
+                                lblStatus.Text = $"Status: {progress}";
+                                Application.DoEvents();
+                            });
+                    }
                     
                     // Convert to our format
                     foreach (var file in allDeletedFiles)

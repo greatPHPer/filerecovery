@@ -22,6 +22,7 @@ partial class Form1
     private CheckBox chkRecycleBin;
     private CheckBox chkRawDisk;
     private CheckBox chkFullDiskScan;
+    private CheckBox chkScanEntireDrive;
     private Label lblScanOptions;
     private TextBox txtSearchText;
     private Label lblSearchText;
@@ -159,9 +160,18 @@ partial class Form1
         chkFullDiskScan.AutoSize = true;
         chkFullDiskScan.Location = new Point(20, 260);
         chkFullDiskScan.Name = "chkFullDiskScan";
-        chkFullDiskScan.Size = new Size(300, 24);
-        chkFullDiskScan.Text = "Full Disk Scan (Very Slow - Entire Drive)";
+        chkFullDiskScan.Size = new Size(200, 24);
+        chkFullDiskScan.Text = "Full Disk Scan (Raw)";
         chkFullDiskScan.Checked = false;
+        
+        // chkScanEntireDrive
+        chkScanEntireDrive = new CheckBox();
+        chkScanEntireDrive.AutoSize = true;
+        chkScanEntireDrive.Location = new Point(230, 260);
+        chkScanEntireDrive.Name = "chkScanEntireDrive";
+        chkScanEntireDrive.Size = new Size(200, 24);
+        chkScanEntireDrive.Text = "Scan Entire Drive (USN)";
+        chkScanEntireDrive.Checked = false;
         
         // lblSearchText
         lblSearchText = new Label();
@@ -217,6 +227,7 @@ partial class Form1
         Controls.Add(chkRecycleBin);
         Controls.Add(chkRawDisk);
         Controls.Add(chkFullDiskScan);
+        Controls.Add(chkScanEntireDrive);
         Controls.Add(lblSearchText);
         Controls.Add(txtSearchText);
         Controls.Add(btnEnableUSN);

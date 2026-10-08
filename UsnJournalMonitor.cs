@@ -79,6 +79,23 @@ public class UsnJournalMonitor
         bool includeSubdirectories,
         Action<string>? onProgress = null)
     {
+        return ScanDeletedDirectoryFromUsnJournal(root, targetDirectory, includeSubdirectories, filterByDirectory: true, onProgress);
+    }
+
+    public List<DeletedFileInfo> ScanEntireDriveForDeletedFiles(
+        string root,
+        Action<string>? onProgress = null)
+    {
+        return ScanDeletedDirectoryFromUsnJournal(root, "", includeSubdirectories: true, filterByDirectory: false, onProgress);
+    }
+
+    private List<DeletedFileInfo> ScanDeletedDirectoryFromUsnJournal(
+        string root,
+        string targetDirectory,
+        bool includeSubdirectories,
+        bool filterByDirectory,
+        Action<string>? onProgress = null)
+    {
         var volumeKey = root.TrimEnd(Path.DirectorySeparatorChar);
 
         using var volumeHandle = CreateFile(
@@ -102,8 +119,8 @@ public class UsnJournalMonitor
                 $"Could not query the USN journal for {volumeKey}.");
         }
 
-        var normalizedDirectory = NormalizePath(targetDirectory)
-            .TrimEnd(Path.DirectorySeparatorChar);
+        var normalizedDirectory = filterByDirectory ? NormalizePath(targetDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar) : "";
 
         var cache = _parentPathCaches.GetOrAdd(
             volumeKey,
@@ -121,7 +138,8 @@ public class UsnJournalMonitor
         var directoryMatches = 0L;
         var duplicatePathCollapses = 0L;
 
-        onProgress?.Invoke($"USN scan started: scanning {targetDirectory}...");
+        var scanTarget = filterByDirectory ? targetDirectory : "entire drive";
+        onProgress?.Invoke($"USN scan started: scanning {scanTarget}...");
 
         while (nextUsn < journal.NextUsn)
         {
@@ -169,11 +187,11 @@ public class UsnJournalMonitor
                     }
                 }
 
-                if (string.IsNullOrWhiteSpace(directory) ||
+                if (filterByDirectory && (string.IsNullOrWhiteSpace(directory) ||
                     !MatchesDirectory(
                         directory,
                         normalizedDirectory,
-                        includeSubdirectories))
+                        includeSubdirectories)))
                 {
                     continue;
                 }
